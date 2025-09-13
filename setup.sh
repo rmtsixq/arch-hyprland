@@ -1,253 +1,173 @@
 #!/bin/bash
 
-# ===============================================
-# HYPRLAND RICE SETUP SCRIPT
-# ===============================================
-# Bu script, Hyprland rice'ını kurmak için gerekli tüm paketleri yükler
-# ve konfigürasyon dosyalarını doğru yerlere kopyalar.
+# The following will attempt to install all needed packages to run Hyprland
+# This is a quick and dirty script there are no error checking
+# This script is meant to run on a clean fresh system
+#
+# Below is a list of the packages that would be installed
+#
+# hyprland: This is the Hyprland compositor
+# hypridle: This is the idle daemon for Hyprland
+# hyprlock: This allows for the locking of the desktop
+# waybar: Waybar now has hyprland support
+# swaync: This is a graphical notification daemon
+# swww: This is used to set a desktop background image
+# kitty: This is the default terminal
+# rofi-wayland: This is an application launcher menu
+# wlogout: This is a logout menu that allows for shutdown, reboot and sleep
+# nautilus: This is a graphical file manager
+# ttf-jetbrains-mono-nerd: Some nerd fonts for icons and overall look
+# ttf-font-awesome: Font awesome icons
+# ttf-material-design-icons: Material design icons
+# polkit-gnome: needed to get superuser access on some graphical application
+# xdg-desktop-portal-hyprland: xdg-desktop-portal backend for hyprland
+# matugen: Color scheme generator
+# cava: Audio visualizer
+# fastfetch: System information tool
+# grim: This is a screenshot tool it grabs images from a Wayland compositor
+# slurp: This helps with screenshots, it selects a region in a Wayland compositor
+# hyprpicker: Color picker for Hyprland
+# brightnessctl: used to control monitor bright level
+# pavucontrol: Audio control panel
+# blueman: Bluetooth manager
+# network-manager-applet: Network manager applet
+# wlogout: Logout menu
 
-set -e
-
-# Renkli çıktı için
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Logo
-echo -e "${BLUE}"
-echo "  _    _ _       _ _                   _     _ "
-echo " | |  | | |     | | |                 | |   | |"
-echo " | |  | | |_ __ | | |_ _ __ __ _ _ __ | |__ | |"
-echo " | |/\| | | '_ \| | | | '__/ _\` | '_ \| '_ \| |"
-echo " \  /\  / | |_) | | | | | | (_| | | | | |_) | |"
-echo "  \/  \/|_| .__/|_|_|_|  \__,_|_| |_|_.__/|_|"
-echo "          | |"
-echo "          |_|"
-echo -e "${NC}"
-echo -e "${YELLOW}Hyprland Rice Setup Script${NC}"
-echo "=================================="
-
-# Sistem kontrolü
-echo -e "${BLUE}[INFO]${NC} Sistem kontrolü yapılıyor..."
-
-# Arch Linux kontrolü
-if ! grep -q "Arch Linux" /etc/os-release 2>/dev/null; then
-    echo -e "${RED}[HATA]${NC} Bu script sadece Arch Linux için tasarlanmıştır!"
-    exit 1
+#### Check for yay ####
+ISYAY=/sbin/yay
+if [ -f "$ISYAY" ]; then 
+    echo -e "yay was located, moving on.\n"
+    yay -Suy
+else 
+    echo -e "yay was not located, please install yay. Exiting script.\n"
+    exit 
 fi
 
-# Root kontrolü
-if [[ $EUID -eq 0 ]]; then
-    echo -e "${RED}[HATA]${NC} Bu scripti root olarak çalıştırmayın!"
-    exit 1
+### Disable wifi powersave mode ###
+read -n1 -rep 'Would you like to disable wifi powersave? (y,n)' WIFI
+if [[ $WIFI == "Y" || $WIFI == "y" ]]; then
+    LOC="/etc/NetworkManager/conf.d/wifi-powersave.conf"
+    echo -e "The following has been added to $LOC.\n"
+    echo -e "[connection]\nwifi.powersave = 2" | sudo tee -a $LOC
+    echo -e "\n"
+    echo -e "Restarting NetworkManager service...\n"
+    sudo systemctl restart NetworkManager
+    sleep 3
 fi
 
-# AUR helper kontrolü
-if ! command -v yay &> /dev/null && ! command -v paru &> /dev/null; then
-    echo -e "${YELLOW}[UYARI]${NC} AUR helper bulunamadı. Yay kuruluyor..."
-    cd /tmp
-    git clone https://aur.archlinux.org/yay.git
-    cd yay
-    makepkg -si --noconfirm
-    cd ~
+### Install all of the above packages ####
+read -n1 -rep 'Would you like to install the packages? (y,n)' INST
+if [[ $INST == "Y" || $INST == "y" ]]; then
+    yay -S --noconfirm hyprland hypridle hyprlock waybar swaync swww \
+    kitty rofi-wayland wlogout nautilus ttf-jetbrains-mono-nerd \
+    ttf-font-awesome ttf-material-design-icons adwaita-icon-theme \
+    colloid-icon-theme polkit-gnome xdg-desktop-portal-hyprland \
+    xdg-desktop-portal-gtk grim slurp hyprpicker brightnessctl \
+    pavucontrol blueman network-manager-applet fastfetch cava \
+    wlogout jq curl wget git
+
+    # Install AUR packages
+    echo -e "Installing AUR packages...\n"
+    yay -S --noconfirm matugen hyprland-nvidia
+
+    # Start the bluetooth service
+    echo -e "Starting the Bluetooth Service...\n"
+    sudo systemctl enable --now bluetooth.service
+    sleep 2
+    
+    # Clean out other portals
+    echo -e "Cleaning out conflicting xdg portals...\n"
+    yay -R --noconfirm xdg-desktop-portal-gnome
 fi
 
-# AUR helper seçimi
-if command -v yay &> /dev/null; then
-    AUR_HELPER="yay"
-elif command -v paru &> /dev/null; then
-    AUR_HELPER="paru"
-else
-    echo -e "${RED}[HATA]${NC} AUR helper kurulamadı!"
-    exit 1
+### Copy Config Files ###
+read -n1 -rep 'Would you like to copy config files? (y,n)' CFG
+if [[ $CFG == "Y" || $CFG == "y" ]]; then
+    echo -e "Copying config files...\n"
+    cp -R .config/hypr ~/.config/
+    cp -R .config/waybar ~/.config/
+    cp -R .config/rofi ~/.config/
+    cp -R .config/kitty ~/.config/
+    cp -R .config/swaync ~/.config/
+    cp -R .config/matugen ~/.config/
+    cp -R .config/cava ~/.config/
+    cp -R .config/fastfetch ~/.config/
+    cp -R .config/wlogout ~/.config/
+    
+    # Set some files as executable 
+    chmod +x ~/.config/hypr/scripts/*.sh
 fi
 
-echo -e "${GREEN}[OK]${NC} Sistem hazır!"
-
-# Gerekli paketleri yükle
-echo -e "${BLUE}[INFO]${NC} Gerekli paketler yükleniyor..."
-
-# Ana paketler
-PACKAGES=(
-    # Hyprland ve Wayland
-    "hyprland"
-    "hypridle"
-    "hyprlock"
-    "hyprpaper"
-    "waybar"
-    "swaync"
-    "swww"
+### Copy wallpapers ###
+read -n1 -rep 'Would you like to copy wallpapers? (y,n)' WALL
+if [[ $WALL == "Y" || $WALL == "y" ]]; then
+    echo -e "Copying wallpapers...\n"
+    mkdir -p ~/Pictures/wallpapers
+    cp wallpapers/* ~/Pictures/wallpapers/
     
-    # Terminal ve Shell
-    "kitty"
-    "zsh"
-    "yazi"
-    
-    # Uygulamalar
-    "rofi-wayland"
-    "nautilus"
-    "firefox"
-    "thunderbird"
-    "discord"
-    "spotify"
-    "vesktop"
-    "telegram-desktop"
-    
-    # Sistem araçları
-    "fastfetch"
-    "cava"
-    "grim"
-    "slurp"
-    "hyprpicker"
-    "brightnessctl"
-    "pavucontrol"
-    "blueman"
-    "network-manager-applet"
-    "polkit-gnome"
-    "xdg-desktop-portal-hyprland"
-    "xdg-desktop-portal-gtk"
-    
-    # Fontlar
-    "ttf-jetbrains-mono-nerd"
-    "ttf-font-awesome"
-    "ttf-material-design-icons"
-    "adwaita-icon-theme"
-    "colloid-icon-theme"
-    
-    # Diğer
-    "wlogout"
-    "jq"
-    "curl"
-    "wget"
-    "git"
-)
+    # Set first wallpaper
+    echo -e "Setting first wallpaper...\n"
+    swww init
+    swww img ~/Pictures/wallpapers/37.jpg
+    ln -sf ~/Pictures/wallpapers/37.jpg ~/.config/hypr/current_wallpaper
+fi
 
-# AUR paketleri
-AUR_PACKAGES=(
-    "matugen"
-    "hyprland-nvidia"
-)
-
-echo -e "${BLUE}[INFO]${NC} Ana paketler yükleniyor..."
-sudo pacman -S --needed --noconfirm "${PACKAGES[@]}"
-
-echo -e "${BLUE}[INFO]${NC} AUR paketleri yükleniyor..."
-$AUR_HELPER -S --needed --noconfirm "${AUR_PACKAGES[@]}"
-
-# Konfigürasyon dosyalarını kopyala
-echo -e "${BLUE}[INFO]${NC} Konfigürasyon dosyaları kopyalanıyor..."
-
-# Ana .config klasörünü oluştur
-mkdir -p ~/.config
-
-# Hyprland konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Hyprland konfigürasyonu kopyalanıyor..."
-cp -r .config/hypr ~/.config/
-
-# Waybar konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Waybar konfigürasyonu kopyalanıyor..."
-cp -r .config/waybar ~/.config/
-
-# Rofi konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Rofi konfigürasyonu kopyalanıyor..."
-cp -r .config/rofi ~/.config/
-
-# Kitty konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Kitty konfigürasyonu kopyalanıyor..."
-cp -r .config/kitty ~/.config/
-
-# SwayNC konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} SwayNC konfigürasyonu kopyalanıyor..."
-cp -r .config/swaync ~/.config/
-
-# Matugen konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Matugen konfigürasyonu kopyalanıyor..."
-cp -r .config/matugen ~/.config/
-
-# Cava konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Cava konfigürasyonu kopyalanıyor..."
-cp -r .config/cava ~/.config/
-
-# Fastfetch konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Fastfetch konfigürasyonu kopyalanıyor..."
-cp -r .config/fastfetch ~/.config/
-
-# Wlogout konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Wlogout konfigürasyonu kopyalanıyor..."
-cp -r .config/wlogout ~/.config/
-
-# Wallpaper klasörünü oluştur ve duvarları kopyala
-echo -e "${BLUE}[INFO]${NC} Wallpaper klasörü oluşturuluyor..."
-mkdir -p ~/Pictures/wallpapers
-cp wallpapers/* ~/Pictures/wallpapers/
-
-# Script dosyalarını çalıştırılabilir yap
-echo -e "${BLUE}[INFO]${NC} Script dosyaları çalıştırılabilir yapılıyor..."
-chmod +x ~/.config/hypr/scripts/*.sh
-
-# Zsh konfigürasyonu
-echo -e "${BLUE}[INFO]${NC} Zsh konfigürasyonu kopyalanıyor..."
-if [ -f .zshrc ]; then
+### Install the zsh shell ###
+read -n1 -rep 'Would you like to install the zsh shell? (y,n)' ZSH
+if [[ $ZSH == "Y" || $ZSH == "y" ]]; then
+    # install zsh
+    echo -e "Installing zsh...\n"
+    yay -S --noconfirm zsh
+    echo -e "Setting zsh as default shell...\n"
+    chsh -s /bin/zsh
+    echo -e "Copying zsh config file to ~/.config ...\n"
     cp .zshrc ~/
 fi
 
-# Sistem servislerini etkinleştir
-echo -e "${BLUE}[INFO]${NC} Sistem servisleri etkinleştiriliyor..."
-systemctl --user enable hypridle
-systemctl --user enable hyprlock
-
-# Hyprland oturumunu etkinleştir
-echo -e "${BLUE}[INFO]${NC} Hyprland oturumu etkinleştiriliyor..."
-if ! grep -q "Hyprland" ~/.xinitrc 2>/dev/null; then
-    echo "exec Hyprland" >> ~/.xinitrc
+### Generate color scheme ###
+read -n1 -rep 'Would you like to generate color scheme? (y,n)' COLOR
+if [[ $COLOR == "Y" || $COLOR == "y" ]]; then
+    echo -e "Generating color scheme...\n"
+    if [ -f ~/Pictures/wallpapers/37.jpg ]; then
+        matugen image ~/Pictures/wallpapers/37.jpg
+    fi
 fi
 
-# Desktop dosyası oluştur
-echo -e "${BLUE}[INFO]${NC} Desktop dosyası oluşturuluyor..."
-mkdir -p ~/.local/share/applications
-cat > ~/.local/share/applications/hyprland.desktop << EOF
+### Enable user services ###
+read -n1 -rep 'Would you like to enable user services? (y,n)' SERV
+if [[ $SERV == "Y" || $SERV == "y" ]]; then
+    echo -e "Enabling user services...\n"
+    systemctl --user enable hypridle
+    systemctl --user enable hyprlock
+fi
+
+### Create desktop entry ###
+read -n1 -rep 'Would you like to create desktop entry? (y,n)' DESK
+if [[ $DESK == "Y" || $DESK == "y" ]]; then
+    echo -e "Creating desktop entry...\n"
+    mkdir -p ~/.local/share/applications
+    cat > ~/.local/share/applications/hyprland.desktop << EOF
 [Desktop Entry]
 Name=Hyprland
 Comment=An intelligent dynamic tiling Wayland compositor
 Exec=Hyprland
 Type=Application
 EOF
-
-# İlk wallpaper'ı ayarla
-echo -e "${BLUE}[INFO]${NC} İlk wallpaper ayarlanıyor..."
-if [ -f ~/Pictures/wallpapers/37.jpg ]; then
-    swww init
-    swww img ~/Pictures/wallpapers/37.jpg
-    ln -sf ~/Pictures/wallpapers/37.jpg ~/.config/hypr/current_wallpaper
 fi
 
-# Matugen ile renk şeması oluştur
-echo -e "${BLUE}[INFO]${NC} Renk şeması oluşturuluyor..."
-if [ -f ~/Pictures/wallpapers/37.jpg ]; then
-    matugen image ~/Pictures/wallpapers/37.jpg
+### Script is done ###
+echo -e "Script had completed.\n"
+echo -e "You can start Hyprland by typing Hyprland (note the capital H).\n"
+echo -e "Key bindings:\n"
+echo -e "Super + Enter: Open terminal\n"
+echo -e "Super + D: Open application menu\n"
+echo -e "Super + W: Wallpaper picker\n"
+echo -e "Super + L: Lock screen\n"
+echo -e "Super + R: Restart waybar\n"
+echo -e "Super + Ctrl + B: Waybar styles\n"
+read -n1 -rep 'Would you like to start Hyprland now? (y,n)' HYP
+if [[ $HYP == "Y" || $HYP == "y" ]]; then
+    exec Hyprland
+else
+    exit
 fi
-
-# Tamamlandı mesajı
-echo -e "${GREEN}"
-echo "=================================="
-echo "  KURULUM TAMAMLANDI! 🎉"
-echo "=================================="
-echo -e "${NC}"
-
-echo -e "${YELLOW}Sonraki adımlar:${NC}"
-echo "1. Sistemi yeniden başlatın"
-echo "2. Giriş ekranında 'Hyprland' seçin"
-echo "3. İlk girişte terminal açmak için: Super + Enter"
-echo "4. Uygulama menüsü için: Super + D"
-echo "5. Wallpaper değiştirmek için: Super + W"
-echo "6. Waybar stillerini değiştirmek için: Super + Ctrl + B"
-
-echo -e "${BLUE}Önemli notlar:${NC}"
-echo "- NVIDIA kartınız varsa 'hyprland-nvidia' paketi kuruldu"
-echo "- Tüm konfigürasyonlar ~/.config/ klasöründe"
-echo "- Wallpaper'lar ~/Pictures/wallpapers/ klasöründe"
-echo "- Script dosyaları ~/.config/hypr/scripts/ klasöründe"
-
-echo -e "${GREEN}İyi kullanımlar! 🚀${NC}"
